@@ -1,4 +1,6 @@
 {
     "python.linting.mypyEnabled": true,
-    "python.pythonPath": "/home/cameronwork/.cache/pypoetry/virtualenvs/crossword-solver-zlbCN8gE-py3.7/bin/python"
+    "python.pythonPath": "/home/cameron/.cache/pypoetry/virtualenvs/crossword-solver-ps35Ahc0-py3.8/bin/python",
+    "python.linting.pylintEnabled": false,
+    "python.linting.enabled": true
 }

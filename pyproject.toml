@@ -5,7 +5,7 @@ description = ""
 authors = ["Cameron Martin <cameronmartin123@gmail.com>"]
 
 [tool.poetry.dependencies]
-python = "^3.7"
+python = "^3.6"
 requests = "^2.24.0"
 beautifulsoup4 = "^4.9.1"
 tensorflow = "^2.2.0"
@@ -16,7 +16,6 @@ numpy = "^1.19.0"
 [tool.poetry.dev-dependencies]
 pytest = "^4.6"
 mypy = "^0.782"
-pip = "^20.1"
 
 [tool.poetry.scripts]
 scrape = "crossword_solver.scrape:scrape"

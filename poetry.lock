@@ -770,8 +770,8 @@ docs = ["sphinx", "jaraco.packaging (>=3.2)", "rst.linker (>=1.9)"]
 testing = ["jaraco.itertools", "func-timeout"]
 
 [metadata]
-content-hash = "35290113103f427b12fbceb3d344d897baf381aa55e97ab676e1e19f3a716209"
-python-versions = "^3.7"
+content-hash = "8cb64a4ce59da55cbeacf3710a9e907a9e481cb11518c836792051d51dbcc3b4"
+python-versions = "^3.6"
 
 [metadata.files]
 absl-py = [

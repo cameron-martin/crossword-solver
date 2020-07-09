@@ -1,4 +1,4 @@
-from crossword_solver.read import parse_guardian
+from crossword_solver.prepare import parse_guardian
 
 
 def test_parse_guardian():

@@ -1,3 +1,4 @@
 {
-    "python.linting.mypyEnabled": true
+    "python.linting.mypyEnabled": true,
+    "python.pythonPath": "/home/cameronwork/.cache/pypoetry/virtualenvs/crossword-solver-zlbCN8gE-py3.7/bin/python"
 }

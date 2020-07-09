@@ -13,7 +13,11 @@ def prepare_guardian():
 
     
 def parse_guardian(crosswords: Iterable[str]) -> List[Tuple[str, str]]:
-    return [
-        (entry['clue'].strip().replace("\r", "").replace("\n", ""), entry['solution'])
-        for line in crosswords
-        for entry in json.loads(line)['entries']]
+    examples = []
+    for line in crosswords:
+        for entry in json.loads(line)['entries']:
+            clue = entry['clue'].strip().replace("\r", "").replace("\n", "")
+            solution = entry['solution']
+            if clue != "" and solution != "":
+                examples.append((clue, solution))
+    return examples

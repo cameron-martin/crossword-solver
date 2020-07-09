@@ -95,7 +95,7 @@ def train():
           decoder_target_data[i][j] = 0
 
 
-  decoder_target_data_one_hot = np.eye(char_map.size)[decoder_target_data]
+  decoder_target_data_one_hot = np.eye(char_map.size, dtype='float32')[decoder_target_data]
 
   # Define an input sequence and process it.
   encoder_inputs = keras.layers.Input(shape=(None,), name="encoder_input")

@@ -8,6 +8,10 @@ import numpy as np
 BUFFER_SIZE = 50000
 BATCH_SIZE = 64
 VALIDATION_SIZE = 5000
+STATE_SIZE = 256
+CHARACTER_EMBEDDING_SIZE = 64
+CHECKPOINT_FILEPATH=Path("tmp/checkpoint/cp-{epoch:04d}.ckpt")
+CHECKPOINT_DIR = CHECKPOINT_FILEPATH.parent
 
 encoder = tfds.features.text.ByteTextEncoder(additional_tokens=["<SOS>", "<EOS>"])
 
@@ -65,7 +69,7 @@ def train():
   # print(list(validation_data.as_numpy_iterator()))
 
   # Read data
-  
+
   char_map = CharacterMap()
   with open(Path("crosswords", "examples.txt")) as f:
     lines = list(line.strip() for line in f)
@@ -97,17 +101,26 @@ def train():
 
   decoder_target_data_one_hot = np.eye(char_map.size, dtype='float32')[decoder_target_data]
 
+  dataset = tf.data.Dataset.from_tensor_slices(({'encoder_input': examples, 'decoder_input': decoder_input_data}, decoder_target_data_one_hot))
+  dataset.shuffle(BUFFER_SIZE, reshuffle_each_iteration=False)
+
+  train_data = dataset.skip(VALIDATION_SIZE).shuffle(BUFFER_SIZE)
+  train_data = train_data.padded_batch(BATCH_SIZE)
+
+  validation_data = dataset.take(VALIDATION_SIZE)
+  validation_data = validation_data.padded_batch(BATCH_SIZE)
+
   # Define an input sequence and process it.
   encoder_inputs = keras.layers.Input(shape=(None,), name="encoder_input")
-  x = keras.layers.Embedding(char_map.size, 64, mask_zero=True)(encoder_inputs)
-  x, state_h, state_c = keras.layers.LSTM(64, return_state=True, name="encoder_lstm")(x)
+  x = keras.layers.Embedding(char_map.size, CHARACTER_EMBEDDING_SIZE, mask_zero=True)(encoder_inputs)
+  x, state_h, state_c = keras.layers.LSTM(STATE_SIZE, return_state=True, name="encoder_lstm")(x)
   # We discard `encoder_outputs` and only keep the states.
   encoder_states = [state_h, state_c]
 
   # Set up the decoder, using `encoder_states` as initial state.
   decoder_inputs = keras.layers.Input(shape=(None,), name="decoder_input")
-  x = keras.layers.Embedding(char_map.size, 64, mask_zero=True)(decoder_inputs)
-  x = keras.layers.LSTM(64, return_sequences=True, name="decoder_lstm")(x, initial_state=encoder_states)
+  x = keras.layers.Embedding(char_map.size, CHARACTER_EMBEDDING_SIZE, mask_zero=True)(decoder_inputs)
+  x = keras.layers.LSTM(STATE_SIZE, return_sequences=True, name="decoder_lstm")(x, initial_state=encoder_states)
   decoder_outputs = keras.layers.Dense(char_map.size, activation='softmax')(x)
 
   # Define the model that will turn
@@ -117,13 +130,16 @@ def train():
   model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=[keras.metrics.CategoricalAccuracy()])
 
   model.summary()
+  
+  latest = tf.train.latest_checkpoint(CHECKPOINT_DIR)
+  if latest is not None:
+    model.load_weights(latest)
 
-  model_checkpoint_callback = keras.callbacks.ModelCheckpoint(filepath=str(Path("checkpoint")))
+  model_checkpoint_callback = keras.callbacks.ModelCheckpoint(filepath=str(CHECKPOINT_FILEPATH), save_weights_only=True)
 
-  model.fit([examples, decoder_input_data], decoder_target_data_one_hot,
-    batch_size=BATCH_SIZE,
+  model.fit(train_data,
+    validation_data=validation_data,
     epochs=50,
-    validation_split=0.2,
     callbacks=[
       model_checkpoint_callback
     ])

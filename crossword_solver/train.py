@@ -1,146 +1,105 @@
 import tensorflow as tf
 from tensorflow import keras
 import tensorflow_datasets as tfds
-import tensorflow_text as tftext
 from pathlib import Path
-import numpy as np
+from typing import List, Union
+import functools
 
-BUFFER_SIZE = 50000
+SHUFFLE_BUFFER_SIZE = 1000
 BATCH_SIZE = 64
 VALIDATION_SIZE = 5000
-STATE_SIZE = 256
+STATE_SIZE = 64
 CHARACTER_EMBEDDING_SIZE = 64
-CHECKPOINT_FILEPATH=Path("tmp/checkpoint/cp-{epoch:04d}.ckpt")
+CHECKPOINT_FILEPATH = Path("tmp/checkpoint/cp-{epoch:04d}.ckpt")
 CHECKPOINT_DIR = CHECKPOINT_FILEPATH.parent
 
-encoder = tfds.features.text.ByteTextEncoder(additional_tokens=["<SOS>", "<EOS>"])
+encoder = tfds.features.text.ByteTextEncoder()
 
-def encode(text_tensor, label_tensor):
-  encoded_text = encoder.encode(text_tensor.numpy())
-  encoded_label = encoder.encode(label_tensor.numpy())
-  return encoded_text, encoded_label
 
-def encode_map_fn(text, label):
-  # py_func doesn't set the shape of the returned tensors.
-  encoded_text, encoded_label = tf.py_function(encode, 
-                                       inp=[text, label], 
-                                       Tout=(tf.int64, tf.int64))
+class LabelEncoder:
+    vocab_size = 29
 
-  # `tf.data.Datasets` work best if all components have a shape set
-  #  so set the shapes manually: 
-  encoded_text.set_shape([None])
-  encoded_label.set_shape([None])
+    @staticmethod
+    def encode_label(label: str) -> Union[List[int], None]:
+        encoded_label = [27]
+        for char in label.lower():
+            encoded_char = ord(char) - ord("a") + 1
+            if encoded_char < 0 or encoded_char > 26:
+                return None
+            encoded_label.append(encoded_char)
+        encoded_label.append(28)
+        return encoded_label
 
-  return tf.one_hot(encoded_text, encoder.vocab_size), tf.one_hot(encoded_label, encoder.vocab_size)
 
-class CharacterMap():
-  def __init__(self):
-    self.map = {}
-    self.current_index = 1
+def get_data(examples_path: Path, labels_path: Path):
+    with open(examples_path) as fe, open(labels_path) as fl:
+        for (example, label) in zip(fe, fl):
+            example = example.strip()
+            label = label.strip()
+            encoded_label = LabelEncoder.encode_label(label)
+            if encoded_label is None:
+                continue
+            decoder_input = encoded_label[:-1]
+            decoder_output = encoded_label[1:]
+            yield (
+                {"encoder_input": encoder.encode(example), "decoder_input": decoder_input},
+                tf.one_hot(decoder_output, LabelEncoder.vocab_size),
+            )
 
-  def get(self, character) -> int:
-    if character in self.map:
-      return self.map[character]
-    else:
-      self.map[character] = self.current_index
-      self.current_index += 1
-      return self.map[character]
 
-  @property
-  def size(self):
-    return self.current_index
+def create_dataset(examples_path: Path, labels_path: Path):
+    return (
+        tf.data.Dataset.from_generator(
+            functools.partial(get_data, examples_path, labels_path),
+            ({"encoder_input": tf.float32, "decoder_input": tf.float32}, tf.float32),
+            (
+                {"encoder_input": tf.TensorShape([None]), "decoder_input": tf.TensorShape([None])},
+                tf.TensorShape([None, LabelEncoder.vocab_size]),
+            ),
+        )
+        .shuffle(SHUFFLE_BUFFER_SIZE)
+        .padded_batch(BATCH_SIZE)
+        .prefetch(tf.data.experimental.AUTOTUNE)
+    )
+
 
 def train():
-  # # Read data
-  # sentences = tf.data.TextLineDataset(str(Path("crosswords", "examples.txt")))
-  # labels = tf.data.TextLineDataset(str(Path("crosswords", "labels.txt")))
-  # dataset = tf.data.Dataset.zip((sentences, labels)) # Dataset<(str, str)>
+    train_data = create_dataset(Path("crosswords", "examples_train.txt"), Path("crosswords", "labels_train.txt"))
+    validation_data = create_dataset(
+        Path("crosswords", "examples_validation.txt"), Path("crosswords", "labels_validation.txt")
+    )
 
-  # dataset = dataset.shuffle(BUFFER_SIZE, reshuffle_each_iteration=False)
-  # dataset = dataset.map(encode_map_fn) # Dataset<(Tensor<[None, n]>, Tensor<[None, n]>)>
-  # dataset = dataset.map(lambda example, label: ([example, label[0:-1]], label[1:]))
+    # Define an input sequence and process it.
+    encoder_inputs = keras.layers.Input(shape=(None,), name="encoder_input")
+    x = keras.layers.Embedding(encoder.vocab_size, CHARACTER_EMBEDDING_SIZE, mask_zero=True)(encoder_inputs)
+    x, state_h, state_c = keras.layers.LSTM(STATE_SIZE, return_state=True, name="encoder_lstm")(x)
+    # We discard `encoder_outputs` and only keep the states.
+    encoder_states = [state_h, state_c]
 
-  # train_data = dataset.skip(VALIDATION_SIZE).shuffle(BUFFER_SIZE)
-  # train_data = train_data.padded_batch(BATCH_SIZE)
+    # Set up the decoder, using `encoder_states` as initial state.
+    decoder_inputs = keras.layers.Input(shape=(None,), name="decoder_input")
+    x = keras.layers.Embedding(LabelEncoder.vocab_size, CHARACTER_EMBEDDING_SIZE, mask_zero=True)(decoder_inputs)
+    x = keras.layers.LSTM(STATE_SIZE, return_sequences=True, name="decoder_lstm")(x, initial_state=encoder_states)
+    decoder_outputs = keras.layers.Dense(LabelEncoder.vocab_size, activation="softmax")(x)
 
-  # validation_data = dataset.take(VALIDATION_SIZE)
-  # validation_data = validation_data.padded_batch(BATCH_SIZE)
+    # Define the model that will turn
+    # `encoder_input_data` & `decoder_input_data` into `decoder_target_data`
+    model = keras.Model([encoder_inputs, decoder_inputs], decoder_outputs)
 
-  # print(list(validation_data.as_numpy_iterator()))
+    model.compile(
+        optimizer="adam", loss="categorical_crossentropy", metrics=[keras.metrics.CategoricalAccuracy()],
+    )
 
-  # Read data
+    model.summary()
 
-  char_map = CharacterMap()
-  with open(Path("crosswords", "examples.txt")) as f:
-    lines = list(line.strip() for line in f)
-    example_count = len(lines)
-    max_sentence_length = max(len(line) for line in lines)
-    examples = np.empty((example_count, max_sentence_length), dtype='float32')
-    for i, line in enumerate(lines):
-      for j in range(0, max_sentence_length):
-        if j < len(line):
-          examples[i][j] = char_map.get(line[j])
-        else:
-          examples[i][j] = 0
-    
-  with open(Path("crosswords", "labels.txt")) as f:
-    lines = list(bytes(f"\t{line}", 'utf-8') for line in f)
-    example_count = len(lines)
-    max_sentence_length = max(len(line) for line in lines) - 1
-    decoder_input_data = np.empty((example_count, max_sentence_length), dtype='float32')
-    decoder_target_data = np.empty((example_count, max_sentence_length), dtype='int')
-    for i, line in enumerate(lines):
-      for j in range(0, max_sentence_length):
-        if (j+1) < len(line):
-          decoder_input_data[i][j] = char_map.get(line[j])
-          decoder_target_data[i][j] = char_map.get(line[j+1])
-        else:
-          decoder_input_data[i][j] = 0
-          decoder_target_data[i][j] = 0
+    latest = tf.train.latest_checkpoint(CHECKPOINT_DIR)
+    if latest is not None:
+        model.load_weights(latest)
 
+    model_checkpoint_callback = keras.callbacks.ModelCheckpoint(
+        filepath=str(CHECKPOINT_FILEPATH), save_weights_only=True
+    )
 
-  decoder_target_data_one_hot = np.eye(char_map.size, dtype='float32')[decoder_target_data]
-
-  dataset = tf.data.Dataset.from_tensor_slices(({'encoder_input': examples, 'decoder_input': decoder_input_data}, decoder_target_data_one_hot))
-  dataset.shuffle(BUFFER_SIZE, reshuffle_each_iteration=False)
-
-  train_data = dataset.skip(VALIDATION_SIZE).shuffle(BUFFER_SIZE)
-  train_data = train_data.padded_batch(BATCH_SIZE)
-
-  validation_data = dataset.take(VALIDATION_SIZE)
-  validation_data = validation_data.padded_batch(BATCH_SIZE)
-
-  # Define an input sequence and process it.
-  encoder_inputs = keras.layers.Input(shape=(None,), name="encoder_input")
-  x = keras.layers.Embedding(char_map.size, CHARACTER_EMBEDDING_SIZE, mask_zero=True)(encoder_inputs)
-  x, state_h, state_c = keras.layers.LSTM(STATE_SIZE, return_state=True, name="encoder_lstm")(x)
-  # We discard `encoder_outputs` and only keep the states.
-  encoder_states = [state_h, state_c]
-
-  # Set up the decoder, using `encoder_states` as initial state.
-  decoder_inputs = keras.layers.Input(shape=(None,), name="decoder_input")
-  x = keras.layers.Embedding(char_map.size, CHARACTER_EMBEDDING_SIZE, mask_zero=True)(decoder_inputs)
-  x = keras.layers.LSTM(STATE_SIZE, return_sequences=True, name="decoder_lstm")(x, initial_state=encoder_states)
-  decoder_outputs = keras.layers.Dense(char_map.size, activation='softmax')(x)
-
-  # Define the model that will turn
-  # `encoder_input_data` & `decoder_input_data` into `decoder_target_data`
-  model = keras.Model([encoder_inputs, decoder_inputs], decoder_outputs)
-
-  model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=[keras.metrics.CategoricalAccuracy()])
-
-  model.summary()
-  
-  latest = tf.train.latest_checkpoint(CHECKPOINT_DIR)
-  if latest is not None:
-    model.load_weights(latest)
-
-  model_checkpoint_callback = keras.callbacks.ModelCheckpoint(filepath=str(CHECKPOINT_FILEPATH), save_weights_only=True)
-
-  model.fit(train_data,
-    validation_data=validation_data,
-    epochs=50,
-    callbacks=[
-      model_checkpoint_callback
-    ])
-
+    model.fit(
+        train_data, validation_data=validation_data, epochs=50, callbacks=[model_checkpoint_callback],
+    )

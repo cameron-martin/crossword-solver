@@ -10,17 +10,19 @@ requests = "^2.24.0"
 beautifulsoup4 = "^4.9.1"
 tensorflow = "^2.2.0"
 tensorflow-datasets = "^3.1.0"
-tensorflow-text = "^2.2.1"
-numpy = "^1.19.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^4.6"
 mypy = "^0.782"
+black = "^19.10b0"
 
 [tool.poetry.scripts]
 scrape = "crossword_solver.scrape:scrape"
 prepare = "crossword_solver.prepare:prepare_guardian"
 train = "crossword_solver.train:train"
+
+[tool.black]
+line-length = 120
 
 [build-system]
 requires = ["poetry>=0.12"]

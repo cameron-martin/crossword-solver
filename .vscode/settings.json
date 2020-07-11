@@ -1,6 +1,10 @@
 {
     "python.linting.mypyEnabled": true,
-    "python.pythonPath": "/home/cameron/.cache/pypoetry/virtualenvs/crossword-solver-ps35Ahc0-py3.8/bin/python",
     "python.linting.pylintEnabled": false,
-    "python.linting.enabled": true
+    "python.linting.enabled": true,
+    "python.formatting.provider": "black",
+    "python.workspaceSymbols.rebuildOnFileSave": true,
+    "[python]": {
+        "editor.formatOnSave": true
+    }
 }

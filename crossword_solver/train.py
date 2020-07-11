@@ -7,7 +7,6 @@ import functools
 
 SHUFFLE_BUFFER_SIZE = 1000
 BATCH_SIZE = 64
-VALIDATION_SIZE = 5000
 STATE_SIZE = 64
 CHARACTER_EMBEDDING_SIZE = 64
 CHECKPOINT_FILEPATH = Path("tmp/checkpoint/cp-{epoch:04d}.ckpt")
@@ -42,7 +41,10 @@ def get_data(examples_path: Path, labels_path: Path):
             decoder_input = encoded_label[:-1]
             decoder_output = encoded_label[1:]
             yield (
-                {"encoder_input": encoder.encode(example), "decoder_input": decoder_input},
+                {
+                    "encoder_input": encoder.encode(example),
+                    "decoder_input": tf.one_hot(decoder_input, LabelEncoder.vocab_size),
+                },
                 tf.one_hot(decoder_output, LabelEncoder.vocab_size),
             )
 
@@ -53,13 +55,16 @@ def create_dataset(examples_path: Path, labels_path: Path):
             functools.partial(get_data, examples_path, labels_path),
             ({"encoder_input": tf.float32, "decoder_input": tf.float32}, tf.float32),
             (
-                {"encoder_input": tf.TensorShape([None]), "decoder_input": tf.TensorShape([None])},
+                {
+                    "encoder_input": tf.TensorShape([None]),
+                    "decoder_input": tf.TensorShape([None, LabelEncoder.vocab_size]),
+                },
                 tf.TensorShape([None, LabelEncoder.vocab_size]),
             ),
         )
+        .cache()
         .shuffle(SHUFFLE_BUFFER_SIZE)
         .padded_batch(BATCH_SIZE)
-        .prefetch(tf.data.experimental.AUTOTUNE)
     )
 
 
@@ -77,8 +82,8 @@ def train():
     encoder_states = [state_h, state_c]
 
     # Set up the decoder, using `encoder_states` as initial state.
-    decoder_inputs = keras.layers.Input(shape=(None,), name="decoder_input")
-    x = keras.layers.Embedding(LabelEncoder.vocab_size, CHARACTER_EMBEDDING_SIZE, mask_zero=True)(decoder_inputs)
+    decoder_inputs = keras.layers.Input(shape=(None, LabelEncoder.vocab_size), name="decoder_input")
+    x = keras.layers.Masking()(decoder_inputs)
     x = keras.layers.LSTM(STATE_SIZE, return_sequences=True, name="decoder_lstm")(x, initial_state=encoder_states)
     decoder_outputs = keras.layers.Dense(LabelEncoder.vocab_size, activation="softmax")(x)
 

@@ -17,7 +17,10 @@ mypy = "^0.782"
 black = "^19.10b0"
 
 [tool.poetry.scripts]
-scrape = "crossword_solver.scrape:scrape"
+scrape_guardian = "crossword_solver.scrape:scrape_guardian"
+scrape_sun = "crossword_solver.scrape:scrape_sun"
+scrape_independent = "crossword_solver.scrape:scrape_independent"
+scrape_mirror = "crossword_solver.scrape:scrape_mirror"
 prepare = "crossword_solver.prepare:prepare_guardian"
 train = "crossword_solver.train:train"
 

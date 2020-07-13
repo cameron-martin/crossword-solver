@@ -31,6 +31,7 @@ def parse_guardian(crosswords: Iterable[str]) -> List[Tuple[str, str]]:
         for entry in json.loads(line)["entries"]:
             clue = entry["clue"].strip().replace("\r", "").replace("\n", "")
             solution = entry["solution"]
-            if clue != "" and solution != "":
+            group = entry["group"]
+            if clue != "" and solution != "" and len(group) == 1:
                 examples.append((clue, solution))
     return examples

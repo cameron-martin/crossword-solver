@@ -25,4 +25,4 @@ fi
 
 CONTAINER_ID="$(cat "$CONTAINER_ID_FILE")"
 
-docker start -a "$CONTAINER_ID"
+docker start -ai "$CONTAINER_ID"

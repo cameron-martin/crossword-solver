@@ -4,6 +4,7 @@ import tensorflow_datasets as tfds
 from pathlib import Path
 from typing import List, Union
 import functools
+import datetime
 
 SHUFFLE_BUFFER_SIZE = 1000
 BATCH_SIZE = 64
@@ -105,6 +106,12 @@ def train():
         filepath=str(CHECKPOINT_FILEPATH), save_weights_only=True
     )
 
+    log_dir = "tmp/logs/fit/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
+
     model.fit(
-        train_data, validation_data=validation_data, epochs=50, callbacks=[model_checkpoint_callback],
+        train_data,
+        validation_data=validation_data,
+        epochs=50,
+        callbacks=[model_checkpoint_callback, tensorboard_callback],
     )

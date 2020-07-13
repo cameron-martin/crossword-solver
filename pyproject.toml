@@ -10,6 +10,7 @@ requests = "^2.24.0"
 beautifulsoup4 = "^4.9.1"
 tensorflow = "^2.2.0"
 tensorflow-datasets = "^3.1.0"
+numpy = "^1.19.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^4.6"
@@ -23,6 +24,7 @@ scrape_independent = "crossword_solver.scrape:scrape_independent"
 scrape_mirror = "crossword_solver.scrape:scrape_mirror"
 prepare = "crossword_solver.prepare:prepare_guardian"
 train = "crossword_solver.train:train"
+predict = "crossword_solver.train:predict_repl"
 
 [tool.black]
 line-length = 120

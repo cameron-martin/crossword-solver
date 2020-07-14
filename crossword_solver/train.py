@@ -121,13 +121,13 @@ def train():
     tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
 
     early_stopping_callback = tf.keras.callbacks.EarlyStopping(
-        monitor="val_loss", patience=1, restore_best_weights=True
+        monitor="val_loss", patience=4, restore_best_weights=True
     )
 
     model.fit(
         train_data,
         validation_data=validation_data,
-        epochs=10,
+        epochs=100,
         callbacks=[model_checkpoint_callback, tensorboard_callback, early_stopping_callback],
     )
 

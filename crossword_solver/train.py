@@ -79,9 +79,9 @@ def create_dataset(examples_path: Path, labels_path: Path):
 
 
 def train():
-    train_data = create_dataset(Path("crosswords", "examples_train.txt"), Path("crosswords", "labels_train.txt"))
+    train_data = create_dataset(Path("tmp", "clues", "examples_train.txt"), Path("tmp", "clues", "labels_train.txt"))
     validation_data = create_dataset(
-        Path("crosswords", "examples_validation.txt"), Path("crosswords", "labels_validation.txt")
+        Path("tmp", "clues", "examples_validation.txt"), Path("tmp", "clues", "labels_validation.txt")
     )
 
     # Define an input sequence and process it.

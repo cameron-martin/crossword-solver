@@ -7,6 +7,9 @@ import functools
 import datetime
 import numpy as np
 
+physical_devices = tf.config.list_physical_devices("GPU")
+tf.config.experimental.set_memory_growth(physical_devices[0], enable=True)
+
 SHUFFLE_BUFFER_SIZE = 1000
 BATCH_SIZE = 64
 STATE_SIZE = 128

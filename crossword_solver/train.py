@@ -66,13 +66,20 @@ def create_dataset(examples_path: Path, labels_path: Path):
     return (
         tf.data.Dataset.from_generator(
             functools.partial(get_data, examples_path, labels_path),
-            ({"encoder_input": tf.float32, "decoder_input": tf.float32}, tf.float32),
+            (
+                {"word_input": tf.float32, "encoder_input": tf.float32, "decoder_input": tf.float32},
+                {"char_output": tf.float32, "word_embedding_output": tf.float32},
+            ),
             (
                 {
-                    "encoder_input": tf.TensorShape([None]),
+                    "word_input": tf.TensorShape([[None]]),
+                    "char_input": tf.TensorShape([[None, None]]),
                     "decoder_input": tf.TensorShape([None, LabelEncoder.vocab_size]),
                 },
-                tf.TensorShape([None, LabelEncoder.vocab_size]),
+                {
+                    "char_output": tf.TensorShape([None, LabelEncoder.vocab_size]),
+                    "word_embedding_output": tf.TensorShape([WORD_EMBEDDING_SIZE]),
+                },
             ),
         )
         .cache()

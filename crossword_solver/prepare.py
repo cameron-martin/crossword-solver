@@ -2,6 +2,7 @@ from typing import List, Tuple, Iterable
 from pathlib import Path
 import json
 import xml.etree.ElementTree as ET
+from unidecode import unidecode
 
 VALIDATION_FREQUENCY = 25
 
@@ -14,6 +15,8 @@ def prepare(clues: Iterable[Tuple[str, str]]):
         clues_dir / "examples_validation.txt", "a"
     ) as fev, open(clues_dir / "labels_validation.txt", "a") as flv:
         for i, (example, label) in enumerate(clues):
+            example = unidecode(example)
+            label = unidecode(label)
             if i % VALIDATION_FREQUENCY == 0:
                 fev.write(f"{example}\n")
                 flv.write(f"{label}\n")

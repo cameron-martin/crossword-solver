@@ -1,14 +1,17 @@
-import tensorflow as tf
-from tensorflow import keras
-import tensorflow_datasets as tfds
+import datetime
+import functools
 from pathlib import Path
 from typing import List, Union
-import functools
-import datetime
+
 import numpy as np
+import tensorflow as tf
+import tensorflow_datasets as tfds
+from tensorflow import keras
+from unidecode import unidecode
 
 physical_devices = tf.config.list_physical_devices("GPU")
-tf.config.experimental.set_memory_growth(physical_devices[0], enable=True)
+if len(physical_devices) > 0:
+    tf.config.experimental.set_memory_growth(physical_devices[0], enable=True)
 
 SHUFFLE_BUFFER_SIZE = 1000
 BATCH_SIZE = 64
@@ -17,68 +20,58 @@ CHARACTER_EMBEDDING_SIZE = 64
 CHECKPOINT_FILEPATH = Path("tmp/checkpoint/cp-{epoch:04d}.ckpt")
 CHECKPOINT_DIR = CHECKPOINT_FILEPATH.parent
 
-encoder = tfds.features.text.ByteTextEncoder()
-
 
 class LabelEncoder:
-    vocab_size = 29
+    start = 1
+    end = 2
+    a_codepoint = ord("a")
+    z_codepoint = ord("z")
+
+    vocab_size = z_codepoint - a_codepoint + 4
 
     @staticmethod
-    def encode_label(label: str) -> Union[List[int], None]:
-        encoded_label = [27]
-        for char in label.lower():
-            encoded_char = ord(char) - ord("a") + 1
-            if encoded_char < 0 or encoded_char > 26:
-                return None
-            encoded_label.append(encoded_char)
-        encoded_label.append(28)
-        return encoded_label
+    @tf.function
+    def codepoint_to_index(codepoint):
+        return codepoint - LabelEncoder.a_codepoint + 3
 
     @staticmethod
-    def decode_char(character: int):
-        return chr(character + ord("a") - 1)
-
-    @staticmethod
-    def is_stop(character: int):
-        return character == 28
+    def index_to_codepoint(index):
+        return index + LabelEncoder.a_codepoint - 3
 
 
-def get_data(examples_path: Path, labels_path: Path):
-    with open(examples_path) as fe, open(labels_path) as fl:
-        for (example, label) in zip(fe, fl):
-            example = example.strip()
-            label = label.strip()
-            encoded_label = LabelEncoder.encode_label(label)
-            if encoded_label is None:
-                continue
-            decoder_input = encoded_label[:-1]
-            decoder_output = encoded_label[1:]
-            yield (
-                {
-                    "encoder_input": encoder.encode(example),
-                    "decoder_input": tf.one_hot(decoder_input, LabelEncoder.vocab_size),
-                },
-                tf.one_hot(decoder_output, LabelEncoder.vocab_size),
-            )
+@tf.function
+def convert_label(example, label):
+    return example, LabelEncoder.codepoint_to_index(label)
 
 
 def create_dataset(examples_path: Path, labels_path: Path):
-    return (
-        tf.data.Dataset.from_generator(
-            functools.partial(get_data, examples_path, labels_path),
-            ({"encoder_input": tf.float32, "decoder_input": tf.float32}, tf.float32),
-            (
-                {
-                    "encoder_input": tf.TensorShape([None]),
-                    "decoder_input": tf.TensorShape([None, LabelEncoder.vocab_size]),
-                },
-                tf.TensorShape([None, LabelEncoder.vocab_size]),
-            ),
-        )
-        .cache()
-        .shuffle(SHUFFLE_BUFFER_SIZE)
-        .padded_batch(BATCH_SIZE)
+    example_chars = tf.data.TextLineDataset(str(examples_path)).map(
+        lambda line: tf.strings.unicode_decode(line, "UTF-8")
     )
+    label_chars = tf.data.TextLineDataset(str(labels_path)).map(
+        lambda line: tf.strings.unicode_decode(tf.strings.lower(line), "UTF-8")
+    )
+
+    dataset = (
+        tf.data.Dataset.zip((example_chars, label_chars))
+        .filter(
+            lambda _, label: tf.reduce_all(
+                tf.math.logical_and(label >= LabelEncoder.a_codepoint, label <= LabelEncoder.z_codepoint)
+            )
+        )
+        .map(convert_label)
+        .map(
+            lambda example, label: (
+                {
+                    "encoder_input": example,
+                    "decoder_input": tf.one_hot(tf.concat([[LabelEncoder.start], label], 0), LabelEncoder.vocab_size),
+                },
+                tf.one_hot(tf.concat([label, [LabelEncoder.end]], 0), LabelEncoder.vocab_size),
+            )
+        )
+    )
+
+    return dataset.cache().shuffle(SHUFFLE_BUFFER_SIZE).padded_batch(BATCH_SIZE).prefetch(2)
 
 
 def train():
@@ -89,7 +82,7 @@ def train():
 
     # Define an input sequence and process it.
     encoder_inputs = keras.layers.Input(shape=(None,), name="encoder_input")
-    x = keras.layers.Embedding(encoder.vocab_size, CHARACTER_EMBEDDING_SIZE, mask_zero=True)(encoder_inputs)
+    x = keras.layers.Embedding(256, CHARACTER_EMBEDDING_SIZE, mask_zero=True)(encoder_inputs)
     x, state_h, state_c = keras.layers.LSTM(STATE_SIZE, return_state=True, name="encoder_lstm")(x)
     # We discard `encoder_outputs` and only keep the states.
     encoder_states = [state_h, state_c]
@@ -158,7 +151,9 @@ class Predictor:
         self.decoder_model = keras.Model([decoder_inputs] + decoder_states_inputs, [decoder_outputs] + decoder_states)
 
     def predict(self, clue: str):
-        states_value = self.encoder_model.predict([encoder.encode(clue)])
+        ascii_clue = unidecode(clue)
+        codepoints = tf.strings.unicode_decode(ascii_clue, "UTF-8")
+        states_value = self.encoder_model.predict(tf.reshape(codepoints, (1, *codepoints.shape)))
 
         # Generate empty target sequence of length 1.
         target_seq = np.zeros((1, 1, LabelEncoder.vocab_size))
@@ -176,10 +171,10 @@ class Predictor:
 
             # Exit condition: either hit max length
             # or find stop character.
-            if LabelEncoder.is_stop(sampled_token_index) or len(decoded_sentence) > 100:
+            if sampled_token_index == LabelEncoder.end or len(decoded_sentence) > 100:
                 return decoded_sentence
 
-            sampled_char = LabelEncoder.decode_char(sampled_token_index)
+            sampled_char = chr(LabelEncoder.index_to_codepoint(sampled_token_index))
             decoded_sentence += sampled_char
 
             # Update the target sequence (of length 1).

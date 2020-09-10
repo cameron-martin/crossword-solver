@@ -35,3 +35,9 @@ For training using a GPU in docker, the following script can be run:
 ```sh
 ./bin/train-in-docker.sh
 ```
+
+To run a prediction repl:
+
+```sh
+poetry run predict
+```

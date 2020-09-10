@@ -21,7 +21,7 @@ poetry run scrape
 This creates a file `crosswords/guardian.ldjson`. This can then be converted into examples, `crosswords/examples.txt` and `crosswords/labels.txt`:
 
 ```sh
-poetry run prepare
+poetry run prepare_all
 ```
 
 Training can then be run as the following:

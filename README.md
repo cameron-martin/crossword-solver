@@ -4,6 +4,14 @@ Solves cryptic crosswords using ML.
 
 ## Usage
 
+Install [poetry](https://python-poetry.org/).
+
+Install dependencies:
+
+```sh
+poetry install
+```
+
 Crosswords can be scraped from the guardian website with the following command:
 
 ```sh
